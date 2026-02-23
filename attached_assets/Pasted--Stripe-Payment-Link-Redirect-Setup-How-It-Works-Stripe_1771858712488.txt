@@ -1,0 +1,62 @@
+## Stripe Payment Link Redirect Setup
+
+### How It Works
+- **Stripe hosts the checkout page** - customers complete payment on Stripe's secure checkout
+- **Your site hosts the thank-you page** - after payment, Stripe redirects customers back to your site
+- **Stripe does NOT create your thank-you page** - you must have one on your site
+
+### What Your Frontend Needs
+1. A thank-you / confirmation page at a URL like `/thank-you` or `/success`
+2. The redirect URL configured in Stripe Payment Link settings
+
+### Redirect URL Format
+```
+https://yourdomain.com/thank-you?session_id={CHECKOUT_SESSION_ID}
+```
+
+Stripe automatically replaces `{CHECKOUT_SESSION_ID}` with the actual session ID after payment.
+
+### Query Parameter
+After redirect, your page URL will look like:
+```
+https://yourdomain.com/thank-you?session_id=cs_live_abc123...
+```
+
+You can access this via `new URLSearchParams(window.location.search).get('session_id')` if needed.
+
+### Important Notes
+- The thank-you page should exist and be accessible
+- No advanced Stripe API integration is required for basic redirects
+- The session_id parameter is optional to use - it's just available if you need it
+
+### Tracking Script
+Add this script to your thank-you page to track affiliate conversions:
+
+```html
+<!-- Add this to your thank-you/success page -->
+<script>
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    const clickId =
+      (window.pluvus && window.pluvus.getClickId && window.pluvus.getClickId()) ||
+      localStorage.getItem("pluvus_click_id") ||
+      (document.cookie.match(/(?:^|; )pluvus_click_id=([^;]+)/) || [])[1] ||
+      null;
+
+    if (!sessionId || !clickId) return;
+
+    fetch("https://f4256486-7d39-4d4b-a0a2-63ba860c4a1f-00-2028tp4gmi6yk.riker.replit.dev/api/track/success", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        pluvus_click_id: clickId,
+        page_url: window.location.href,
+        ts: Date.now()
+      }),
+      keepalive: true
+    });
+  })();
+</script>
+```
