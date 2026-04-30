@@ -13,9 +13,15 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   app.post("/api/create-checkout-session", async (req: Request, res: Response) => {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
+    const mode = process.env.STRIPE_MODE === "live" ? "live" : "test";
+    const secretKey = mode === "live"
+      ? process.env.STRIPE_SECRET_KEY
+      : process.env.STRIPE_SECRET_KEY_TEST;
+
     if (!secretKey) {
-      return res.status(500).json({ error: "STRIPE_SECRET_KEY is not configured." });
+      return res.status(500).json({
+        error: `STRIPE_SECRET_KEY${mode === "live" ? "" : "_TEST"} is not configured.`,
+      });
     }
 
     const appUrl = (() => {
