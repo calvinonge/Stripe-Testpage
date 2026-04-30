@@ -75,6 +75,9 @@ export async function registerRoutes(
 
       return res.json({ url: session.url });
     } catch (err: unknown) {
+      if (err instanceof Stripe.errors.StripeInvalidRequestError) {
+        return res.status(400).json({ error: err.message });
+      }
       const message = err instanceof Error ? err.message : "An unknown error occurred";
       return res.status(500).json({ error: message });
     }
