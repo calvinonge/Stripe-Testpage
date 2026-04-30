@@ -25,6 +25,9 @@ export async function registerRoutes(
         const firstDomain = replitDomains.split(",")[0].trim();
         return `https://${firstDomain}`;
       }
+      const host = req.headers["x-forwarded-host"] ?? req.headers.host;
+      const proto = req.headers["x-forwarded-proto"] ?? req.protocol;
+      if (host) return `${proto}://${host}`;
       return null;
     })();
 
