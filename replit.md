@@ -60,8 +60,10 @@ shared/           # Shared code between client/server
 ## External Dependencies
 
 ### Payment Processing
-- **Stripe**: Stripe Buy Button integration for checkout (client-side embed)
-- Publishable key and buy button ID configured in home page component
+- **Stripe**: Two integration methods available, toggled on the home page:
+  - **Buy Button** (client-side embed): Publishable key and buy button ID in `client/src/pages/home.tsx`
+  - **Checkout Session** (server-side): `POST /api/create-checkout-session` in `server/routes.ts` — requires `STRIPE_SECRET_KEY` environment secret; uses inline price_data (amount/name configurable in routes.ts)
+- After Checkout Session payment, Stripe redirects to `/thank-you?session_id={CHECKOUT_SESSION_ID}`
 
 ### Analytics/Tracking
 - **Pluvus**: Conversion tracking script loaded in index.html
