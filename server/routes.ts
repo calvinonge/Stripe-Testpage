@@ -53,6 +53,7 @@ export async function registerRoutes(
               currency: FALLBACK_CURRENCY,
               product_data: { name: FALLBACK_PRODUCT_NAME },
               unit_amount: FALLBACK_UNIT_AMOUNT,
+              recurring: { interval: "month" },
             },
             quantity: 1,
           },
@@ -62,10 +63,14 @@ export async function registerRoutes(
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         line_items: lineItems,
-        mode: "payment",
+        mode: "subscription",
         success_url: `${appUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/`,
-        ...(pluvus_click_id ? { metadata: { pluvus_click_id } } : {}),
+        ...(pluvus_click_id ? {
+          client_reference_id: pluvus_click_id,
+          metadata: { pluvus_click_id },
+          subscription_data: { metadata: { pluvus_click_id } },
+        } : {}),
       });
 
       return res.json({ url: session.url });
