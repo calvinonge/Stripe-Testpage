@@ -1,32 +1,7 @@
-import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CheckCircle } from "lucide-react";
 
 export default function ThankYou() {
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sessionId = params.get("session_id");
-    const clickId =
-      ((window as any).pluvus?.getClickId?.()) ||
-      localStorage.getItem("pluvus_click_id") ||
-      (document.cookie.match(/(?:^|; )pluvus_click_id=([^;]+)/) || [])[1] ||
-      null;
-
-    if (!sessionId || !clickId) return;
-
-    fetch("https://f4256486-7d39-4d4b-a0a2-63ba860c4a1f-00-2028tp4gmi6yk.riker.replit.dev/api/track/success", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: sessionId,
-        pluvus_click_id: clickId,
-        page_url: window.location.href,
-        ts: Date.now()
-      }),
-      keepalive: true
-    });
-  }, []);
-
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="w-full max-w-md text-center">
