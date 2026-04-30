@@ -26,11 +26,12 @@ export default function Home() {
     setError(null);
     try {
       const res = await fetch("/api/create-checkout-session", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create session");
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to create session");
+      if (!data.url) throw new Error("No checkout URL returned");
       window.location.href = data.url;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An unknown error occurred");
       setLoading(false);
     }
   }
