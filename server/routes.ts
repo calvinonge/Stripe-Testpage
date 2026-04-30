@@ -34,7 +34,7 @@ export async function registerRoutes(
 
     const stripe = new Stripe(secretKey);
 
-    const { price_id } = req.body as { price_id?: string };
+    const { price_id } = (req.body ?? {}) as { price_id?: string };
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = price_id
       ? [{ price: price_id, quantity: 1 }]
