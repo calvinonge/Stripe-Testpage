@@ -21,14 +21,24 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function getPluvusClickId(): string | null {
+    return (
+      ((window as { pluvus?: { getClickId?: () => string } }).pluvus?.getClickId?.()) ||
+      localStorage.getItem("pluvus_click_id") ||
+      (document.cookie.match(/(?:^|; )pluvus_click_id=([^;]+)/) || [])[1] ||
+      null
+    );
+  }
+
   async function handleCheckoutSession() {
     setLoading(true);
     setError(null);
     try {
+      const clickId = getPluvusClickId();
       const res = await fetch("/api/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ pluvus_click_id: clickId ?? undefined }),
       });
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to create session");

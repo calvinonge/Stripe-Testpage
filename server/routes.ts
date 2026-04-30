@@ -37,7 +37,7 @@ export async function registerRoutes(
 
     const stripe = new Stripe(secretKey);
 
-    const { price_id } = (req.body ?? {}) as { price_id?: string };
+    const { price_id, pluvus_click_id } = (req.body ?? {}) as { price_id?: string; pluvus_click_id?: string };
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = price_id
       ? [{ price: price_id, quantity: 1 }]
@@ -59,6 +59,7 @@ export async function registerRoutes(
         mode: "payment",
         success_url: `${appUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/`,
+        ...(pluvus_click_id ? { metadata: { pluvus_click_id } } : {}),
       });
 
       return res.json({ url: session.url });
