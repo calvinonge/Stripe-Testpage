@@ -1,0 +1,121 @@
+You are updating the Pluvus integration UI and thank-you page implementation to support a “Client-Side Tracking (No Webhooks)” mode for merchants using third-party checkout providers.
+
+Objective
+
+Add a third integration toggle that enables a fully client-side tracking flow (no webhooks required), and dynamically adjusts the UI + instructions accordingly.
+
+1. Add New Integration Mode (Toggle)
+
+Add a new selectable option in the Integrations page:
+
+Existing:
+Stripe (webhook-based)
+Shopify (native integration)
+New:
+Client-Side Tracking (No Webhooks)
+Behavior:
+When this toggle is selected:
+Hide all webhook-related UI (inputs, instructions, warnings)
+Hide Stripe-specific setup steps
+Show only script-based integration instructions
+Update copy to emphasize “no backend changes required”
+2. Update UI Content for This Mode
+
+When Client-Side Tracking is selected, show only:
+
+Section A — Tracking Script
+
+Display:
+
+<script src="https://pluvus.com/api/track/script/{TRACKING_ID}" async></script>
+
+Instructions:
+
+Add to <head> of all pages
+Explain that it captures affiliate clicks and stores a click ID (cookie/localStorage ~30 days)
+Section B — Conversion Tracking (Thank-You Page)
+
+Show a single recommended implementation block:
+
+<script>
+window.addEventListener('load', function() {
+  if (window.pluvus) {
+    window.pluvus.trackConversion({
+      amount: ORDER_TOTAL,
+      currency: 'USD',
+      externalId: 'ORDER_ID'
+    });
+  }
+});
+</script>
+Requirements:
+Clearly indicate:
+ORDER_TOTAL must be dynamically injected from backend
+ORDER_ID is optional but recommended (deduplication)
+Add helper text:
+“Use your existing order data — no new backend logic needed”
+3. Thank-You Page Integration Logic (Important)
+
+Ensure the AI implements:
+
+Conversion fires only after page load
+
+Guard with:
+
+if (window.pluvus)
+Safe fallback:
+If no affiliate click exists → do nothing
+No duplicate tracking:
+Encourage externalId
+4. Hide / Disable Conflicting Systems
+
+When this mode is active:
+
+Completely hide:
+Webhook setup instructions
+Stripe event setup (checkout.session.completed, invoice.paid)
+Any backend-required steps
+Do NOT show hybrid instructions (no mixing modes)
+5. Add Redirect Requirement Notice
+
+Add a visible note:
+
+Merchant must configure payment provider to:
+Redirect to their own domain after payment
+Land on a page where Pluvus script is installed
+
+Label:
+“Required: Post-payment redirect must return to your site”
+
+6. UX Details
+This mode should feel:
+Simple
+Minimal
+“2-step setup”
+Add a small summary box:
+
+You only need:
+
+Script in <head>
+trackConversion on thank-you page
+7. Constraints
+Do NOT introduce:
+Webhooks
+Backend API calls
+Server-side tracking
+Assume:
+Merchant already has order data on thank-you page
+We are only “tapping into it”
+8. Optional (Nice to Have)
+Add copy:
+“If your checkout is not fully on your domain, this method will not work”
+Add validation hint:
+“Test by placing a test order via an affiliate link”
+Output
+
+Implement:
+
+Updated Integrations UI with third toggle
+Conditional rendering logic
+Clean instruction blocks for this mode only
+No references to webhooks when this mode is active
