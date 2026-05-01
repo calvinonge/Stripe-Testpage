@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShieldCheck, Loader2 } from "lucide-react";
@@ -126,6 +127,16 @@ export default function Home() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="mt-4 text-center">
+        <Link
+          href="/integrations"
+          data-testid="link-integrations"
+          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+        >
+          Integration guide →
+        </Link>
+      </div>
     </div>
   );
 }
