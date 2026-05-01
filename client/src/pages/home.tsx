@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-type Method = "buy-button" | "checkout-session";
+type Method = "buy-button" | "checkout-session" | "client-side";
 
 export default function Home() {
   const [method, setMethod] = useState<Method>("buy-button");
@@ -31,15 +31,20 @@ export default function Home() {
     );
   }
 
-  async function handleCheckoutSession() {
+  async function handleCheckoutSession(trackingMode: "webhook" | "client-side") {
     setLoading(true);
     setError(null);
     try {
       const clickId = getPluvusClickId();
+      const body: Record<string, string> = { tracking_mode: trackingMode };
+      // Only pass click ID for webhook mode — client-side mode bridges via browser
+      if (trackingMode === "webhook" && clickId) {
+        body.pluvus_click_id = clickId;
+      }
       const res = await fetch("/api/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pluvus_click_id: clickId ?? undefined }),
+        body: JSON.stringify(body),
       });
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to create session");
@@ -50,6 +55,12 @@ export default function Home() {
       setLoading(false);
     }
   }
+
+  const TABS: { id: Method; label: string; sub: string }[] = [
+    { id: "buy-button",       label: "Buy Button",       sub: "Stripe embed" },
+    { id: "checkout-session", label: "Checkout Session", sub: "Webhook tracking" },
+    { id: "client-side",      label: "Client-Side",      sub: "No webhooks" },
+  ];
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -68,28 +79,23 @@ export default function Home() {
 
         <CardContent className="space-y-6 pt-4">
           <div className="flex rounded-lg border overflow-hidden" data-testid="method-toggle">
-            <button
-              onClick={() => { setMethod("buy-button"); setError(null); }}
-              data-testid="toggle-buy-button"
-              className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                method === "buy-button"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              Buy Button
-            </button>
-            <button
-              onClick={() => { setMethod("checkout-session"); setError(null); }}
-              data-testid="toggle-checkout-session"
-              className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                method === "checkout-session"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              Checkout Session
-            </button>
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => { setMethod(tab.id); setError(null); }}
+                data-testid={`toggle-${tab.id}`}
+                className={`flex-1 py-2 px-1 flex flex-col items-center gap-0.5 text-xs font-medium transition-colors ${
+                  method === tab.id
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                <span className="text-sm font-semibold leading-tight">{tab.label}</span>
+                <span className={`text-[10px] leading-tight ${method === tab.id ? "text-primary-foreground/70" : "text-muted-foreground/70"}`}>
+                  {tab.sub}
+                </span>
+              </button>
+            ))}
           </div>
 
           <div className="flex justify-center" data-testid="stripe-button-container">
@@ -102,25 +108,38 @@ export default function Home() {
 
             {method === "checkout-session" && (
               <div className="w-full space-y-3">
+                <p className="text-xs text-muted-foreground text-center">
+                  Pluvus click ID passed in session metadata → tracked via Stripe webhook
+                </p>
                 <Button
-                  onClick={handleCheckoutSession}
+                  onClick={() => handleCheckoutSession("webhook")}
                   disabled={loading}
                   className="w-full"
                   data-testid="button-pay-now"
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Redirecting…
-                    </>
-                  ) : (
-                    "Pay Now"
-                  )}
+                  {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Redirecting…</> : "Pay Now"}
                 </Button>
                 {error && (
-                  <p className="text-sm text-destructive text-center" data-testid="text-checkout-error">
-                    {error}
-                  </p>
+                  <p className="text-sm text-destructive text-center" data-testid="text-checkout-error">{error}</p>
+                )}
+              </div>
+            )}
+
+            {method === "client-side" && (
+              <div className="w-full space-y-3">
+                <p className="text-xs text-muted-foreground text-center">
+                  No metadata in session — Pluvus fires <code className="bg-muted px-1 rounded">trackConversion()</code> on the thank-you page
+                </p>
+                <Button
+                  onClick={() => handleCheckoutSession("client-side")}
+                  disabled={loading}
+                  className="w-full"
+                  data-testid="button-pay-now-client-side"
+                >
+                  {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Redirecting…</> : "Pay Now"}
+                </Button>
+                {error && (
+                  <p className="text-sm text-destructive text-center" data-testid="text-client-side-error">{error}</p>
                 )}
               </div>
             )}
@@ -128,7 +147,7 @@ export default function Home() {
         </CardContent>
       </Card>
 
-      <div className="mt-4 text-center">
+      <div className="mt-4 text-center absolute bottom-6 left-0 right-0">
         <Link
           href="/integrations"
           data-testid="link-integrations"

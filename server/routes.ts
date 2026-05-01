@@ -7,18 +7,23 @@ const FALLBACK_UNIT_AMOUNT = 999;
 const FALLBACK_CURRENCY = "usd";
 const FALLBACK_PRODUCT_NAME = "Purchase";
 
+function getStripeClient() {
+  const mode = process.env.STRIPE_MODE === "live" ? "live" : "test";
+  const secretKey = mode === "live"
+    ? process.env.STRIPE_SECRET_KEY
+    : process.env.STRIPE_SECRET_KEY_TEST;
+  return { stripe: secretKey ? new Stripe(secretKey) : null, mode, secretKey };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
   app.post("/api/create-checkout-session", async (req: Request, res: Response) => {
-    const mode = process.env.STRIPE_MODE === "live" ? "live" : "test";
-    const secretKey = mode === "live"
-      ? process.env.STRIPE_SECRET_KEY
-      : process.env.STRIPE_SECRET_KEY_TEST;
+    const { stripe, mode, secretKey } = getStripeClient();
 
-    if (!secretKey) {
+    if (!secretKey || !stripe) {
       return res.status(500).json({
         error: `STRIPE_SECRET_KEY${mode === "live" ? "" : "_TEST"} is not configured.`,
       });
@@ -41,9 +46,13 @@ export async function registerRoutes(
       return res.status(500).json({ error: "APP_URL is not configured. Set it to your site's base URL." });
     }
 
-    const stripe = new Stripe(secretKey);
+    const { price_id, pluvus_click_id, tracking_mode } = (req.body ?? {}) as {
+      price_id?: string;
+      pluvus_click_id?: string;
+      tracking_mode?: "webhook" | "client-side";
+    };
 
-    const { price_id, pluvus_click_id } = (req.body ?? {}) as { price_id?: string; pluvus_click_id?: string };
+    const isClientSide = tracking_mode === "client-side";
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = price_id
       ? [{ price: price_id, quantity: 1 }]
@@ -59,14 +68,20 @@ export async function registerRoutes(
           },
         ];
 
+    const successUrl = isClientSide
+      ? `${appUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}&tracking=client-side`
+      : `${appUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`;
+
     try {
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
         line_items: lineItems,
         mode: "subscription",
-        success_url: `${appUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
+        success_url: successUrl,
         cancel_url: `${appUrl}/`,
-        ...(pluvus_click_id ? {
+        // For webhook mode: stamp pluvus click ID in metadata for webhook pickup
+        // For client-side mode: intentionally omit — tracking fires browser-side on thank-you page
+        ...(!isClientSide && pluvus_click_id ? {
           client_reference_id: pluvus_click_id,
           metadata: { pluvus_click_id },
           subscription_data: { metadata: { pluvus_click_id } },
@@ -74,6 +89,38 @@ export async function registerRoutes(
       });
 
       return res.json({ url: session.url });
+    } catch (err: unknown) {
+      if (err instanceof Stripe.errors.StripeInvalidRequestError) {
+        return res.status(400).json({ error: err.message });
+      }
+      const message = err instanceof Error ? err.message : "An unknown error occurred";
+      return res.status(500).json({ error: message });
+    }
+  });
+
+  // Returns minimal session info so the thank-you page can fire trackConversion()
+  // without needing a webhook. Only exposes amount_total and currency.
+  app.get("/api/session/:id", async (req: Request, res: Response) => {
+    const { stripe, mode, secretKey } = getStripeClient();
+
+    if (!secretKey || !stripe) {
+      return res.status(500).json({
+        error: `STRIPE_SECRET_KEY${mode === "live" ? "" : "_TEST"} is not configured.`,
+      });
+    }
+
+    const sessionId = req.params.id;
+    if (!sessionId || !sessionId.startsWith("cs_")) {
+      return res.status(400).json({ error: "Invalid session ID." });
+    }
+
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      return res.json({
+        id: session.id,
+        amount_total: session.amount_total,
+        currency: session.currency,
+      });
     } catch (err: unknown) {
       if (err instanceof Stripe.errors.StripeInvalidRequestError) {
         return res.status(400).json({ error: err.message });
