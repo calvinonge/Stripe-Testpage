@@ -147,21 +147,29 @@ export default function Home() {
         </CardContent>
       </Card>
 
-      <div className="mt-4 text-center absolute bottom-6 left-0 right-0 flex items-center justify-center gap-4">
-        <Link
-          href="/join"
-          data-testid="link-join"
-          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
-        >
-          Become an affiliate →
-        </Link>
-        <span className="text-muted-foreground/40 text-xs">|</span>
+      <div className="mt-4 absolute bottom-4 left-0 right-0 flex flex-col items-center gap-2">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/join"
+            data-testid="link-join-simple"
+            className="text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Affiliate signup — simple
+          </Link>
+          <Link
+            href="/join/pay"
+            data-testid="link-join-pay"
+            className="text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Affiliate signup — with PayPal
+          </Link>
+        </div>
         <Link
           href="/integrations"
           data-testid="link-integrations"
-          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+          className="text-xs text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-4 transition-colors"
         >
-          Integration guide →
+          Integration guide
         </Link>
       </div>
     </div>
