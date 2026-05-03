@@ -147,7 +147,15 @@ export default function Home() {
         </CardContent>
       </Card>
 
-      <div className="mt-4 text-center absolute bottom-6 left-0 right-0">
+      <div className="mt-4 text-center absolute bottom-6 left-0 right-0 flex items-center justify-center gap-4">
+        <Link
+          href="/join"
+          data-testid="link-join"
+          className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+        >
+          Become an affiliate →
+        </Link>
+        <span className="text-muted-foreground/40 text-xs">|</span>
         <Link
           href="/integrations"
           data-testid="link-integrations"
