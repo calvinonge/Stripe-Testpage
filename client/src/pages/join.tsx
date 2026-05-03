@@ -169,7 +169,9 @@ export default function Join() {
     if (!name.trim()) errs.name = "Please enter your full name.";
     if (!email.trim() || !EMAIL_RE.test(email.trim())) errs.email = "Please enter a valid email address.";
     if (!paypal.trim() || !EMAIL_RE.test(paypal.trim())) errs.paypal = "Please enter a valid PayPal email address.";
-    if (paypal.trim().toLowerCase() !== paypalConfirm.trim().toLowerCase()) {
+    if (!paypalConfirm.trim()) {
+      errs.paypalConfirm = "Please confirm your PayPal email.";
+    } else if (paypal.trim().toLowerCase() !== paypalConfirm.trim().toLowerCase()) {
       errs.paypalConfirm = "PayPal emails do not match.";
     }
     setErrors(errs);
@@ -194,17 +196,19 @@ export default function Join() {
         }),
       });
 
-      const data = await res.json() as {
-        success?: boolean;
-        status?: string;
-        error?: string;
-        affiliate?: { trackingLink?: string };
-        productAccess?: { promoCode?: string };
-      };
-
       if (res.status === 429) {
         setApiError("Too many attempts. Please wait a moment and try again.");
         return;
+      }
+
+      let data: { success?: boolean; status?: string; error?: string; affiliate?: { trackingLink?: string }; productAccess?: { promoCode?: string } } = {};
+      try {
+        data = await res.json();
+      } catch {
+        if (!res.ok) {
+          setApiError("Something went wrong. Please try again.");
+          return;
+        }
       }
 
       if (!res.ok) {
