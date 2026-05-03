@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle2, Copy, Check, Info, Zap, Webhook, ShoppingBag } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Check, Info, Zap, Webhook, ShoppingBag, Users } from "lucide-react";
 
 const TRACKER_ID = "f14e781b-4c88-479e-b62a-a5185cee65e2";
 
@@ -210,6 +210,51 @@ const TABS: { id: Mode; label: string; badge?: string }[] = [
   { id: "client-side", label: "Client-Side Tracking", badge: "No Webhooks" },
 ];
 
+function JoinLinkCard() {
+  const [copied, setCopied] = useState(false);
+  const joinUrl = `${window.location.origin}/join`;
+
+  function handleCopy() {
+    navigator.clipboard.writeText(joinUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <Card data-testid="card-join-link">
+      <CardContent className="pt-5 pb-5">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Users className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0 space-y-2">
+            <div>
+              <p className="font-semibold text-sm">Affiliate Signup Page</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Share this link with potential affiliates. They fill out the form and get their tracking link instantly.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+              <span className="text-sm font-mono text-foreground truncate flex-1 select-all" data-testid="text-join-url">
+                {joinUrl}
+              </span>
+              <button
+                onClick={handleCopy}
+                data-testid="button-copy-join-url"
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 text-primary transition-colors flex-shrink-0"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Integrations() {
   const [mode, setMode] = useState<Mode>("client-side");
 
@@ -220,6 +265,8 @@ export default function Integrations() {
           <h1 className="text-2xl font-bold" data-testid="text-integrations-title">Pluvus Integration Guide</h1>
           <p className="text-muted-foreground text-sm">Choose your integration method to see setup instructions.</p>
         </div>
+
+        <JoinLinkCard />
 
         <div className="flex flex-col sm:flex-row gap-2" data-testid="integration-mode-tabs">
           {TABS.map((tab) => (
