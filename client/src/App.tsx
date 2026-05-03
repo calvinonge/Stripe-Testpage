@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import ThankYou from "@/pages/thank-you";
 import Integrations from "@/pages/integrations";
 import Join from "@/pages/join";
+import JoinPay from "@/pages/join-pay";
 
 function Router() {
   return (
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/thank-you" component={ThankYou} />
       <Route path="/integrations" component={Integrations} />
       <Route path="/join" component={Join} />
+      <Route path="/join/pay" component={JoinPay} />
       <Route component={NotFound} />
     </Switch>
   );

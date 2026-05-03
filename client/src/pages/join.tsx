@@ -25,8 +25,6 @@ function mapApiError(raw: string, status: number): string {
     "Email is required": "Please enter your email address.",
     "Name is required": "Please enter your name.",
     "Invalid email format": "Please enter a valid email address.",
-    "Payment information is required": "Please enter your PayPal email.",
-    "Invalid PayPal email format": "Please enter a valid PayPal email address.",
     "This campaign is not accepting new affiliates": "This program is currently closed to new applications.",
   };
   if (raw.startsWith("This email is already registered")) {
@@ -96,7 +94,7 @@ function SuccessScreen({ data }: { data: SuccessData }) {
           <CopyButton text={data.trackingLink} />
         </div>
         <p className="text-xs text-muted-foreground">
-          Share this link on social media, in emails, or in your bio. Every sale made through it is attributed to you.
+          Share this link anywhere — every sale made through it is attributed to you.
         </p>
       </div>
 
@@ -125,7 +123,7 @@ function SuccessScreen({ data }: { data: SuccessData }) {
           A welcome email has been sent to <strong className="text-foreground">{data.email}</strong> with everything you need.
         </p>
         <p>
-          Questions? Contact {MERCHANT_NAME} at{" "}
+          Questions? Reach {MERCHANT_NAME} at{" "}
           <a href={MERCHANT_SITE} className="underline hover:text-foreground" target="_blank" rel="noopener noreferrer">
             {MERCHANT_SITE.replace("https://", "")}
           </a>
@@ -144,7 +142,7 @@ function PendingScreen() {
       <div>
         <h2 className="text-xl font-bold">Application submitted!</h2>
         <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">
-          Your application is under review. {MERCHANT_NAME} will be in touch once it's approved. You'll receive an email with your tracking link.
+          Your application is under review. You'll get an email once {MERCHANT_NAME} approves it — that email will include your tracking link.
         </p>
       </div>
     </div>
@@ -157,8 +155,6 @@ export default function Join() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [paypal, setPaypal] = useState("");
-  const [paypalConfirm, setPaypalConfirm] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
@@ -166,14 +162,9 @@ export default function Join() {
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
-    if (!name.trim()) errs.name = "Please enter your full name.";
+    if (!name.trim()) errs.name = "Please enter your name.";
     if (!email.trim() || !EMAIL_RE.test(email.trim())) errs.email = "Please enter a valid email address.";
-    if (!paypal.trim() || !EMAIL_RE.test(paypal.trim())) errs.paypal = "Please enter a valid PayPal email address.";
-    if (!paypalConfirm.trim()) {
-      errs.paypalConfirm = "Please confirm your PayPal email.";
-    } else if (paypal.trim().toLowerCase() !== paypalConfirm.trim().toLowerCase()) {
-      errs.paypalConfirm = "PayPal emails do not match.";
-    }
+
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -191,8 +182,6 @@ export default function Join() {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim().toLowerCase(),
-          paymentMethod: "paypal",
-          paymentInfo: paypal.trim().toLowerCase(),
         }),
       });
 
@@ -260,7 +249,7 @@ export default function Join() {
                   <div>
                     <p className="text-sm font-semibold">Earn 20% commission on the first sale you refer</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      One-time payout per referred customer, sent to your PayPal.
+                      One-time payout per referred customer.
                     </p>
                   </div>
                 </div>
@@ -268,7 +257,7 @@ export default function Join() {
                 <div className="flex items-start gap-3 text-sm text-muted-foreground">
                   <Users className="w-4 h-4 flex-shrink-0 mt-0.5 text-muted-foreground" />
                   <p>
-                    After joining you'll receive a unique tracking link to share and a promo code your audience can use at checkout.
+                    Sign up in seconds. You'll get a unique tracking link and a promo code to share with your audience right away.
                   </p>
                 </div>
               </div>
@@ -307,37 +296,6 @@ export default function Join() {
                     aria-invalid={!!errors.email}
                   />
                   {errors.email && <FieldError message={errors.email} />}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="paypal">PayPal Email <span className="text-muted-foreground font-normal">(for commission payouts)</span></Label>
-                  <Input
-                    id="paypal"
-                    type="email"
-                    placeholder="your-paypal@example.com"
-                    value={paypal}
-                    onChange={(e) => { setPaypal(e.target.value); if (errors.paypal) setErrors(p => ({ ...p, paypal: "" })); }}
-                    data-testid="input-paypal"
-                    aria-invalid={!!errors.paypal}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    This is where your 20% commission will be sent. Can be different from your sign-up email.
-                  </p>
-                  {errors.paypal && <FieldError message={errors.paypal} />}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="paypalConfirm">Confirm PayPal Email</Label>
-                  <Input
-                    id="paypalConfirm"
-                    type="email"
-                    placeholder="Confirm your PayPal email"
-                    value={paypalConfirm}
-                    onChange={(e) => { setPaypalConfirm(e.target.value); if (errors.paypalConfirm) setErrors(p => ({ ...p, paypalConfirm: "" })); }}
-                    data-testid="input-paypal-confirm"
-                    aria-invalid={!!errors.paypalConfirm}
-                  />
-                  {errors.paypalConfirm && <FieldError message={errors.paypalConfirm} />}
                 </div>
 
                 {apiError && (
