@@ -190,7 +190,7 @@ export default function JoinPay() {
           name: name.trim(),
           email: email.trim().toLowerCase(),
           paymentMethod: "paypal",
-          paymentInfo: { paypalEmail: paypal.trim().toLowerCase() },
+          paymentInfo: paypal.trim().toLowerCase(),
         }),
       });
 

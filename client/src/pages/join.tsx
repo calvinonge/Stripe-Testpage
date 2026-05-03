@@ -155,6 +155,7 @@ export default function Join() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [paypal, setPaypal] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [apiError, setApiError] = useState<string | null>(null);
@@ -164,6 +165,7 @@ export default function Join() {
     const errs: Record<string, string> = {};
     if (!name.trim()) errs.name = "Please enter your name.";
     if (!email.trim() || !EMAIL_RE.test(email.trim())) errs.email = "Please enter a valid email address.";
+    if (!paypal.trim() || !EMAIL_RE.test(paypal.trim())) errs.paypal = "Please enter a valid PayPal email address.";
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -182,6 +184,8 @@ export default function Join() {
         body: JSON.stringify({
           name: name.trim(),
           email: email.trim().toLowerCase(),
+          paymentMethod: "paypal",
+          paymentInfo: paypal.trim().toLowerCase(),
         }),
       });
 
@@ -296,6 +300,21 @@ export default function Join() {
                     aria-invalid={!!errors.email}
                   />
                   {errors.email && <FieldError message={errors.email} />}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="paypal">PayPal Email <span className="text-muted-foreground font-normal">(for commission payouts)</span></Label>
+                  <Input
+                    id="paypal"
+                    type="email"
+                    placeholder="your-paypal@example.com"
+                    value={paypal}
+                    onChange={(e) => { setPaypal(e.target.value); if (errors.paypal) setErrors(p => ({ ...p, paypal: "" })); }}
+                    data-testid="input-paypal"
+                    aria-invalid={!!errors.paypal}
+                  />
+                  <p className="text-xs text-muted-foreground">This is where your 20% commission will be sent.</p>
+                  {errors.paypal && <FieldError message={errors.paypal} />}
                 </div>
 
                 {apiError && (
