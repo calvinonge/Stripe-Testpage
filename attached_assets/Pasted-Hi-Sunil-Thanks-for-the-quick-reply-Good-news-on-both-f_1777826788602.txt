@@ -1,0 +1,166 @@
+Hi Sunil,
+
+Thanks for the quick reply. Good news on both fronts: we've adjusted the backend so payment details are no longer required at signup, and Wise/bank-to-bank works perfectly fine on our end for paying creators out — we just won't be collecting that info via our API.
+
+Below is everything your engineer needs to wire up the form on travel.dyme.earth, plus our recommendation on how to handle banking info given you don't want PayPal.
+
+1) The API endpoint
+Your form should POST directly to:
+
+POST https://pluvus.com/api/join/dyme-affiliate-program-yr9pti
+Content-Type: application/json
+
+That's the API counterpart to your hosted join page at https://pluvus.com/join/dyme-affiliate-program-yr9pti — same campaign, same downstream behavior, just submitted programmatically from your own form.
+
+2) Required fields (this is the whole schema)
+To double-confirm what I mentioned: the only two fields our API requires are name and email. That's it. No payment fields, no PayPal, nothing else mandatory.
+
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com"
+}
+
+3) Type contract — exact shapes we accept
+This is the part to pay closest attention to. Our backend validates strictly, so the request body needs to match these types exactly.
+
+Request body — top level:
+
+Must be a JSON object (not a JSON array, not a JSON string, not form-encoded). The Content-Type: application/json header is required so our Express server parses it into an object on req.body.
+email — required
+
+Type: string. Must be a JSON string literal ("jane@example.com"), not a number, not null, not an object, not wrapped in an array.
+We trim whitespace and lowercase it server-side before storing — so " Jane@Example.com " is stored as "jane@example.com". You don't need to pre-clean it, but you can.
+
+Must match a standard email regex, total length ≤ 254 characters, local part (before the @) ≤ 64 characters.
+Empty string, missing field, or null → 400 { "error": "Email is required" }.
+Non-string or malformed → 400 { "error": "Invalid email format" }.
+name — required
+
+Type: string. Must be a JSON string literal. Don't send numbers or objects — our handler calls .trim() on it directly and a non-string will be rejected.
+Must contain at least one non-whitespace character. Empty or whitespace-only → 400 { "error": "Name is required" }.
+We use this to generate the affiliate's referral code slug (lowercased, alphanumeric-only, first 12 chars), so a normal display name like "Jane Doe" is perfect. Long names are fine — only the slug derivation truncates, the full name is stored as-is.
+paymentMethod — must be omitted entirely for Dyme
+
+Our endpoint has this rule: "if paymentMethod is present at all, it must equal the string "paypal"." Anything else (including null, "", "wise", "bank") → 400 { "error": "PayPal is the only accepted payment method" }.
+
+The safe path for you: don't include the key at all in the JSON body. That puts the request through the headless/external-form path, which skips payout collection entirely.
+
+paymentInfo — must be omitted entirely for Dyme
+
+Only ever read if paymentMethod === "paypal". Since you'll be omitting paymentMethod, omit this too.
+
+That's the entire accepted surface. Any other extra fields you send (source, utm_*, phone, etc.) are silently ignored — they won't break the request, but they also won't be stored, so don't rely on us to capture them.
+
+4) Response contract — exact shapes you'll get back
+All responses are application/json.
+
+Success — pending approval (this is what your campaign is currently configured for, since approval is required):
+
+{
+  "success": true,
+  "status": "pending",
+  "message": "Your application has been submitted and is awaiting merchant approval."
+}
+
+success: boolean
+status: string literal "pending"
+message: string
+Success — instant activation (only fires if your campaign were ever flipped to not require approval):
+
+{
+  "success": true,
+  "message": "You have successfully joined the campaign!",
+  "emailSent": true,
+  "affiliate": {
+    "referralCode": "janedoe_a1b2c3d4e5f6",
+    "trackingLink": "https://travel.dyme.earth/?ref=janedoe_a1b2c3d4e5f6",
+    "joinedAt": "2026-05-03T17:42:11.123Z"
+  },
+  "campaign": {
+    "name": "Dyme Affiliate Program",
+    "rewardType": "percentage",
+    "rewardValue": { "percentage": 20 },
+    "campaignType": "affiliate",
+    "deliverables": null,
+    "fixedPaymentAmount": 0,
+    "paymentTerms": null
+  }
+}
+
+affiliate.referralCode: string
+affiliate.trackingLink: string | null (null only for non-tracking campaign types — not applicable to you)
+affiliate.joinedAt: ISO-8601 string
+campaign.rewardValue: object (shape depends on rewardType)
+Errors:
+
+{ "error": "human-readable message string" }
+
+400 — validation failure (missing/invalid fields, duplicate email for this campaign, campaign not accepting applications)
+404 — campaign slug doesn't exist
+500 — server error; please flag any of these to us
+5) Example request from your form
+A minimal fetch call from travel.dyme.earth would look like this:
+
+const res = await fetch(
+  "https://pluvus.com/api/join/dyme-affiliate-program-yr9pti",
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: form.fullName,   // string, required
+      email: form.email,     // string, required
+      // Do NOT include paymentMethod or paymentInfo
+    }),
+  }
+);
+const data = await res.json();
+if (!res.ok) {
+  // data.error is a string — show it to the user
+  showError(data.error);
+  return;
+}
+if (data.status === "pending") {
+  showThankYou("Your application is in review.");
+}
+
+6) CORS / cross-origin compatibility
+Confirmed compatible. The endpoint sends:
+
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Content-Type
+Access-Control-Max-Age: 86400
+
+…on both the OPTIONS preflight and the actual POST response. So travel.dyme.earth can call us directly from the browser with no proxy and no extra setup. (If you ever decide to call us from your backend instead, that's also fine — same endpoint, same contract, no auth header needed for this public endpoint.)
+
+7) Compatibility checklist before going live
+ Content-Type: application/json header set on the POST.
+ Body is a JSON object, not a stringified-string-inside-a-string.
+ email and name are both strings, not numbers/objects/arrays.
+ paymentMethod and paymentInfo keys are completely omitted from the body (not set to null, not set to "").
+ Frontend handles the status: "pending" response (your campaign requires approval, so this is what you'll get on every successful submission until you change that setting).
+ Frontend reads data.error (string) on non-2xx responses and surfaces it.
+ Sanity-check: GET https://pluvus.com/api/join/dyme-affiliate-program-yr9pti returns the public campaign info — useful as a health check.
+ Test POST with a throwaway email before launching to confirm end-to-end behavior, then have your team approve it inside the Pluvus dashboard.
+This is genuinely everything you need on the API side — no auth tokens, no API keys, no webhooks to register, no schemas to negotiate. Two strings in, JSON status out, affiliate lands in our dashboard for your team to approve.
+
+8) After signup — the affiliate experience
+Once submitted:
+The affiliate record lands in your Pluvus dashboard exactly the same way as if they'd used our hosted join page at https://pluvus.com/join/dyme-affiliate-program-yr9pti.
+Your team gets notified by email. You will have to approve the affiliates on Pluvus
+On approval, the affiliate automatically receives their tracking link branded under travel.dyme.earth/?ref=... — and yes, to confirm your other question: that's the link your creators will use in their content. Every click on it is attributed to that creator.
+9) Our recommendation on collecting Wise / banking info
+This part is completely your call — it's not an API thing on our side at all, it's purely a workflow decision for your team. Here are the two options:
+
+Option A (our recommendation): collect banking info on your own onboarding form.
+Add a "Wise account / bank details" section to the form on travel.dyme.earth and capture it at the same time as name + email. You'd store it on your end (or pass it back to us as a note when you approve the affiliate inside Pluvus). The advantage is the same one we mentioned originally — by the time commissions are due, you already have a confirmed payout method on file with zero back-and-forth. It also reduces drop-off, because affiliates are most engaged at signup.
+
+Option B: collect banking info manually after approval.
+Approve affiliates and creators inside Pluvus first, then have your team reach out by email to collect Wise details before the first payout. This keeps your onboarding form shorter and lighter, but it does add an extra manual touchpoint per affiliate before you can pay them.
+
+Either works on our side — we don't gate anything on payout info for your account anymore. Our recommendation is Option A purely from an operational/no-delays perspective, but we genuinely don't have a strong opinion and totally understand if you'd rather keep banking info collection separate. Whichever way you go, we're set up to support it.
+
+Let me know if your engineer has any questions while wiring this up, or if you'd like us to hop on a quick call to walk through it together. Happy to be on standby for the test POST whenever you're ready.
+
+Best,
+Calvin
