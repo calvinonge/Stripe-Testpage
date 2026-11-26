@@ -14,8 +14,6 @@ const TEST_SESSION_ID = /^cs_test_[a-zA-Z0-9]{1,200}$/;
 const checkoutRequest = z.object({
   offer: z.string(),
   request_id: z.string().uuid().optional(),
-  tracking_mode: z.enum(["webhook", "client-side"]).default("webhook"),
-  pluvus_click_id: z.string().trim().min(1).max(150).optional(),
 }).strict();
 
 function getAppOrigin() {
@@ -82,18 +80,11 @@ export function registerRoutes(app: Express) {
       return res.status(503).json({ error: "Stripe test checkout needs to be set up first." });
     }
 
-    const { tracking_mode, pluvus_click_id, request_id } = input.data;
-    const clickId = tracking_mode === "webhook" ? pluvus_click_id : undefined;
-    const metadata = {
-      source: CHECKOUT_SOURCE,
-      offer: pass.id,
-      tracking_mode,
-      ...(clickId ? { pluvus_click_id: clickId } : {}),
-    };
+    const { request_id } = input.data;
+    const metadata = { source: CHECKOUT_SOURCE, offer: pass.id };
     const cancelUrl = new URL("/", appOrigin);
     cancelUrl.searchParams.set("checkout", "canceled");
     cancelUrl.searchParams.set("offer", pass.id);
-    if (tracking_mode === "client-side") cancelUrl.searchParams.set("tracking", tracking_mode);
     cancelUrl.hash = "passes";
 
     try {
@@ -113,7 +104,6 @@ export function registerRoutes(app: Express) {
         cancel_url: cancelUrl.href,
         metadata,
         payment_intent_data: { metadata },
-        client_reference_id: clickId,
       }, request_id ? { idempotencyKey: request_id } : undefined);
 
       if (session.livemode !== false || !TEST_SESSION_ID.test(session.id) || !session.url) {
@@ -149,7 +139,6 @@ export function registerRoutes(app: Express) {
         amount_total: session.amount_total,
         currency: session.currency,
         status: paid ? "paid" : session.status === "expired" ? "expired" : "unpaid",
-        tracking_mode: session.metadata.tracking_mode === "client-side" ? "client-side" : "webhook",
       };
       return res.json(checkout);
     } catch (error) {

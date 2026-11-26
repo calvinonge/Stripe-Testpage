@@ -1,19 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, CircleAlert, Copy, CreditCard, Loader2 } from "lucide-react";
-import { Link, useSearch } from "wouter";
+import { useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Storefront } from "@/components/storefront";
-import { loadPluvus, pluvusTrackerId, readPluvusClickId } from "@/lib/pluvus";
-import { HANGOUT_PASSES, formatCheckoutAmount, getHangoutPass, type HangoutPass, type TrackingMode } from "@shared/checkout";
+import { HANGOUT_PASSES, formatCheckoutAmount, getHangoutPass, type HangoutPass } from "@shared/checkout";
 
 const TEST_CARD = "4242 4242 4242 4242";
 
 type CheckoutAttempt = {
   offer: HangoutPass["id"];
   request_id: string;
-  tracking_mode: TrackingMode;
-  pluvus_click_id?: string;
 };
 
 function TestCard() {
@@ -52,7 +49,6 @@ function TestCard() {
 export default function Home() {
   const params = new URLSearchParams(useSearch());
   const canceled = params.get("checkout") === "canceled";
-  const trackingMode: TrackingMode = pluvusTrackerId && params.get("tracking") === "client-side" ? "client-side" : "webhook";
   const [pass, setPass] = useState<HangoutPass>(getHangoutPass(params.get("offer")) ?? HANGOUT_PASSES[0]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,15 +90,7 @@ export default function Home() {
     setError(null);
     setPending(true);
     try {
-      if (!attempt.current || attempt.current.tracking_mode !== trackingMode) {
-        if (trackingMode === "webhook") await loadPluvus();
-        attempt.current = {
-          offer: pass.id,
-          request_id: crypto.randomUUID(),
-          tracking_mode: trackingMode,
-          pluvus_click_id: trackingMode === "webhook" ? readPluvusClickId() : undefined,
-        };
-      }
+      attempt.current ??= { offer: pass.id, request_id: crypto.randomUUID() };
 
       const response = await fetch("/api/create-checkout-session", {
         method: "POST",
@@ -128,18 +116,17 @@ export default function Home() {
         <section className="brand-hero" aria-labelledby="hangout-title">
           <div>
             <h1 id="hangout-title" className="brand-title">Have a hangout<br />with Calvin.</h1>
-            <p>Pick a hangout pass and try it out in Stripe. Every payment is simulated.</p>
+            <p>Pick a hangout pass and sign up through Stripe. Every payment is simulated.</p>
           </div>
           <img src="/calvin-coffee.jpg" className="brand-hero-image" alt="Two coffees on a sunlit café table" width="1200" height="800" fetchPriority="high" />
         </section>
 
         <form className="brand-checkout" id="passes" onSubmit={startCheckout}>
           <div className="brand-section-heading">
-            <h2>Choose a hangout pass</h2>
+            <h2>Sign up for a hangout</h2>
             <span>One-time payment · USD</span>
           </div>
           {canceled && <p className="brand-notice" role="status">Checkout canceled. You can try the same pass or pick a different one.</p>}
-          {trackingMode === "client-side" && <p className="brand-notice">Browser attribution test is active.</p>}
           <fieldset className="brand-passes" disabled={pending}>
             <legend className="sr-only">Choose a hangout pass</legend>
             {HANGOUT_PASSES.map((option) => (
@@ -156,14 +143,14 @@ export default function Home() {
             <TestCard />
             <Button type="submit" className="brand-cta" disabled={pending || !config.data?.enabled}>
               {pending ? <><Loader2 size={18} className="motion-safe:animate-spin" /> Opening Stripe…</>
-                : <>Test checkout · {formatCheckoutAmount(pass.amount)} <ArrowRight size={18} aria-hidden="true" /></>}
+                : <>Sign up · {formatCheckoutAmount(pass.amount)} <ArrowRight size={18} aria-hidden="true" /></>}
             </Button>
           </div>
 
           {error && <p className="brand-notice brand-error" role="alert"><CircleAlert size={17} aria-hidden="true" /> {error}</p>}
           {config.isPending && <p className="brand-availability" role="status">Checking Stripe test checkout…</p>}
           {config.isError && <p className="brand-availability" role="status">Could not check Stripe availability. <button type="button" onClick={() => void config.refetch()}>Try again</button></p>}
-          {config.data?.enabled === false && <p className="brand-availability" role="status">Add a Stripe test key to enable checkout. <Link href="/integrations">Open test setup</Link></p>}
+          {config.data?.enabled === false && <p className="brand-availability" role="status">Add your Stripe test key in Render to enable sign-ups.</p>}
         </form>
       </main>
     </Storefront>

@@ -136,7 +136,6 @@
 }
 
 .brand-section-heading > span,
-.brand-footer,
 .brand-card-help p,
 .brand-availability {
   color: var(--brand-muted);
@@ -283,7 +282,7 @@
   margin-top: 12px;
 }
 
-.brand-availability :is(a, button) {
+.brand-availability button {
   color: var(--brand-accent);
   font-weight: 650;
   text-decoration: underline;
@@ -309,34 +308,6 @@
 
 .brand-error svg {
   flex-shrink: 0;
-}
-
-.brand-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0 20px;
-  min-height: 63px;
-  padding-block: 8px;
-  border-top: 1px solid var(--brand-line);
-}
-
-.brand-footer nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 18px;
-}
-
-.brand-footer a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-}
-
-.brand-footer a:hover {
-  text-decoration: underline;
-  text-underline-offset: 4px;
 }
 
 .brand-result-main {
@@ -405,16 +376,6 @@
   margin-top: 24px;
 }
 
-.brand-setup {
-  width: min(720px, 100% - 48px);
-  flex: 1;
-  padding-block: 42px;
-}
-
-.brand-setup .brand-title {
-  font-size: clamp(3rem, 7vw, 4.75rem);
-}
-
 @media (max-width: 760px) {
   .brand-container { width: min(100% - 36px, 590px); }
   .brand-header-inner { min-height: 62px; }
@@ -437,5 +398,4 @@
   .brand-card-help { order: 1; }
   .brand-card-help p { font-size: 0.76rem; }
   .brand-result-actions > * { flex: 1 1 auto; }
-  .brand-footer nav { column-gap: 14px; }
 }

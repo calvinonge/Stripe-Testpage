@@ -8,7 +8,6 @@ export const HANGOUT_PASSES = [
 ] as const;
 
 export type HangoutPass = (typeof HANGOUT_PASSES)[number];
-export type TrackingMode = "webhook" | "client-side";
 
 export interface CheckoutSession {
   id: string;
@@ -16,7 +15,6 @@ export interface CheckoutSession {
   amount_total: number;
   currency: typeof CHECKOUT_CURRENCY;
   status: "paid" | "unpaid" | "expired";
-  tracking_mode: TrackingMode;
 }
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {

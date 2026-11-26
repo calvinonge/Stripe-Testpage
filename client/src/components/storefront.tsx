@@ -19,14 +19,6 @@ export function Storefront({ children }: { children: ReactNode }) {
         </div>
       </header>
       {children}
-      <footer className="brand-container brand-footer">
-        <span>Brand tools</span>
-        <nav aria-label="Brand tools">
-          <Link href="/join">Affiliate signup</Link>
-          <Link href="/join/pay">PayPal signup</Link>
-          <Link href="/integrations">Test setup</Link>
-        </nav>
-      </footer>
     </div>
   );
 }
