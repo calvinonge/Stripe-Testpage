@@ -259,6 +259,7 @@
 
 .brand-shell .brand-cta {
   min-width: 225px;
+  border-color: var(--brand-accent);
   background: var(--brand-accent);
   color: #fffdf7;
 }
