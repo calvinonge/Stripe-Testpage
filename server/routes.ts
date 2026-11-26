@@ -1,134 +1,164 @@
-import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import type { Express, Response } from "express";
+import { rateLimit } from "express-rate-limit";
 import Stripe from "stripe";
+import { z } from "zod";
+import {
+  BRAND_NAME,
+  CHECKOUT_CURRENCY,
+  getHangoutPass,
+  type CheckoutSession,
+} from "../shared/checkout";
 
-const FALLBACK_UNIT_AMOUNT = 999;
-const FALLBACK_CURRENCY = "usd";
-const FALLBACK_PRODUCT_NAME = "Purchase";
+const CHECKOUT_SOURCE = "calvin-brand-interface";
+const TEST_SESSION_ID = /^cs_test_[a-zA-Z0-9]{1,200}$/;
+const checkoutRequest = z.object({
+  offer: z.string(),
+  request_id: z.string().uuid().optional(),
+  tracking_mode: z.enum(["webhook", "client-side"]).default("webhook"),
+  pluvus_click_id: z.string().trim().min(1).max(150).optional(),
+}).strict();
 
-function getStripeClient() {
-  const mode = process.env.STRIPE_MODE === "live" ? "live" : "test";
-  const secretKey = mode === "live"
-    ? process.env.STRIPE_SECRET_KEY
-    : process.env.STRIPE_SECRET_KEY_TEST;
-  return { stripe: secretKey ? new Stripe(secretKey) : null, mode, secretKey };
+function getAppOrigin() {
+  const configuredUrl = process.env.APP_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!configuredUrl) return `http://localhost:${process.env.PORT || "5000"}`;
+
+  try {
+    const url = new URL(configuredUrl);
+    const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    const isAllowedProtocol = url.protocol === "https:" || (isLocal && url.protocol === "http:");
+    if (isAllowedProtocol && url.pathname === "/" && !url.search && !url.hash && !url.username && !url.password) {
+      return url.origin;
+    }
+  } catch {
+    // Checkout stays disabled until its return URL is configured.
+  }
+  return null;
 }
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+function handleStripeError(res: Response, operation: string, error: unknown) {
+  if (error instanceof Stripe.errors.StripeError) {
+    console.error(`[stripe] ${operation}: ${error.type}${error.code ? ` (${error.code})` : ""}`);
+    if (error instanceof Stripe.errors.StripeAuthenticationError || error instanceof Stripe.errors.StripePermissionError) {
+      return res.status(503).json({ error: "Stripe rejected the test key. Check the Stripe test key in your service settings." });
+    }
+  } else {
+    console.error(`[stripe] ${operation} failed`);
+  }
+  return res.status(502).json({ error: "Stripe test checkout is temporarily unavailable. Please try again." });
+}
 
-  app.post("/api/create-checkout-session", async (req: Request, res: Response) => {
-    const { stripe, mode, secretKey } = getStripeClient();
+export function registerRoutes(app: Express) {
+  const testKey = process.env.STRIPE_SECRET_KEY_TEST?.trim();
+  const stripe = testKey && /^(?:sk|rk)_test_[a-zA-Z0-9]+$/.test(testKey)
+    ? new Stripe(testKey, { maxNetworkRetries: 1, timeout: 10_000 })
+    : null;
+  const appOrigin = getAppOrigin();
+  const limited = (limit: number) => rateLimit({
+    windowMs: 60_000,
+    limit,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: { error: "Too many checkout requests. Wait a minute and try again." },
+  });
 
-    if (!secretKey || !stripe) {
-      return res.status(500).json({
-        error: `STRIPE_SECRET_KEY${mode === "live" ? "" : "_TEST"} is not configured.`,
-      });
+  app.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+
+  app.use("/api", (_req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
+
+  app.get("/api/checkout/config", (_req, res) => {
+    res.json({ enabled: Boolean(stripe && appOrigin) });
+  });
+
+  app.post("/api/create-checkout-session", limited(20), async (req, res) => {
+    const input = checkoutRequest.safeParse(req.body);
+    const pass = input.success ? getHangoutPass(input.data.offer) : undefined;
+    if (!input.success || !pass) {
+      return res.status(400).json({ error: "Choose one of the three hangout passes and try again." });
+    }
+    if (!stripe || !appOrigin) {
+      return res.status(503).json({ error: "Stripe test checkout needs to be set up first." });
     }
 
-    const appUrl = (() => {
-      if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
-      const replitDomains = process.env.REPLIT_DOMAINS;
-      if (replitDomains) {
-        const firstDomain = replitDomains.split(",")[0].trim();
-        return `https://${firstDomain}`;
-      }
-      const host = req.headers["x-forwarded-host"] ?? req.headers.host;
-      const proto = req.headers["x-forwarded-proto"] ?? req.protocol;
-      if (host) return `${proto}://${host}`;
-      return null;
-    })();
-
-    if (!appUrl) {
-      return res.status(500).json({ error: "APP_URL is not configured. Set it to your site's base URL." });
-    }
-
-    const { price_id, pluvus_click_id, tracking_mode } = (req.body ?? {}) as {
-      price_id?: string;
-      pluvus_click_id?: string;
-      tracking_mode?: "webhook" | "client-side";
+    const { tracking_mode, pluvus_click_id, request_id } = input.data;
+    const clickId = tracking_mode === "webhook" ? pluvus_click_id : undefined;
+    const metadata = {
+      source: CHECKOUT_SOURCE,
+      offer: pass.id,
+      tracking_mode,
+      ...(clickId ? { pluvus_click_id: clickId } : {}),
     };
-
-    const isClientSide = tracking_mode === "client-side";
-
-    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = price_id
-      ? [{ price: price_id, quantity: 1 }]
-      : [
-          {
-            price_data: {
-              currency: FALLBACK_CURRENCY,
-              product_data: { name: FALLBACK_PRODUCT_NAME },
-              unit_amount: FALLBACK_UNIT_AMOUNT,
-              recurring: { interval: "month" },
-            },
-            quantity: 1,
-          },
-        ];
-
-    const successUrl = isClientSide
-      ? `${appUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}&tracking=client-side`
-      : `${appUrl}/thank-you?session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = new URL("/", appOrigin);
+    cancelUrl.searchParams.set("checkout", "canceled");
+    cancelUrl.searchParams.set("offer", pass.id);
+    if (tracking_mode === "client-side") cancelUrl.searchParams.set("tracking", tracking_mode);
+    cancelUrl.hash = "passes";
 
     try {
       const session = await stripe.checkout.sessions.create({
+        mode: "payment",
         payment_method_types: ["card"],
-        line_items: lineItems,
-        mode: "subscription",
-        success_url: successUrl,
-        cancel_url: `${appUrl}/`,
-        // For webhook mode: stamp pluvus click ID in metadata for webhook pickup
-        // For client-side mode: intentionally omit — tracking fires browser-side on thank-you page
-        ...(!isClientSide && pluvus_click_id ? {
-          client_reference_id: pluvus_click_id,
-          metadata: { pluvus_click_id },
-          subscription_data: { metadata: { pluvus_click_id } },
-        } : {}),
-      });
+        branding_settings: { display_name: BRAND_NAME, button_color: "#283e33" },
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: CHECKOUT_CURRENCY,
+            unit_amount: pass.amount,
+            product_data: { name: `Hangout with Calvin — ${pass.name}` },
+          },
+        }],
+        success_url: `${appOrigin}/thank-you?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: cancelUrl.href,
+        metadata,
+        payment_intent_data: { metadata },
+        client_reference_id: clickId,
+      }, request_id ? { idempotencyKey: request_id } : undefined);
 
-      return res.json({ url: session.url });
-    } catch (err: unknown) {
-      if (err instanceof Stripe.errors.StripeInvalidRequestError) {
-        return res.status(400).json({ error: err.message });
+      if (session.livemode !== false || !TEST_SESSION_ID.test(session.id) || !session.url) {
+        return res.status(502).json({ error: "Stripe did not return a test checkout. Please try again." });
       }
-      const message = err instanceof Error ? err.message : "An unknown error occurred";
-      return res.status(500).json({ error: message });
+      return res.json({ url: session.url });
+    } catch (error) {
+      return handleStripeError(res, "create checkout", error);
     }
   });
 
-  // Returns minimal session info so the thank-you page can fire trackConversion()
-  // without needing a webhook. Only exposes amount_total and currency.
-  app.get("/api/session/:id", async (req: Request, res: Response) => {
-    const { stripe, mode, secretKey } = getStripeClient();
-
-    if (!secretKey || !stripe) {
-      return res.status(500).json({
-        error: `STRIPE_SECRET_KEY${mode === "live" ? "" : "_TEST"} is not configured.`,
-      });
-    }
-
+  app.get("/api/session/:id", limited(60), async (req, res) => {
     const sessionId = req.params.id;
-    if (!sessionId || !sessionId.startsWith("cs_")) {
-      return res.status(400).json({ error: "Invalid session ID." });
+    if (typeof sessionId !== "string" || !TEST_SESSION_ID.test(sessionId)) {
+      return res.status(400).json({ error: "Invalid Stripe test session." });
+    }
+    if (!stripe) {
+      return res.status(503).json({ error: "Stripe test checkout needs to be set up first." });
     }
 
     try {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
-      return res.json({
+      const pass = getHangoutPass(session.metadata?.offer);
+      if (session.livemode !== false || session.mode !== "payment" || session.metadata?.source !== CHECKOUT_SOURCE ||
+          !pass || session.amount_total !== pass.amount || session.currency !== CHECKOUT_CURRENCY) {
+        return res.status(404).json({ error: "This test checkout could not be found." });
+      }
+
+      const paid = session.status === "complete" && session.payment_status === "paid";
+      const checkout: CheckoutSession = {
         id: session.id,
+        offer: pass.id,
         amount_total: session.amount_total,
         currency: session.currency,
-      });
-    } catch (err: unknown) {
-      if (err instanceof Stripe.errors.StripeInvalidRequestError) {
-        return res.status(400).json({ error: err.message });
+        status: paid ? "paid" : session.status === "expired" ? "expired" : "unpaid",
+        tracking_mode: session.metadata.tracking_mode === "client-side" ? "client-side" : "webhook",
+      };
+      return res.json(checkout);
+    } catch (error) {
+      if (error instanceof Stripe.errors.StripeInvalidRequestError && error.code === "resource_missing") {
+        return res.status(404).json({ error: "This test checkout could not be found." });
       }
-      const message = err instanceof Error ? err.message : "An unknown error occurred";
-      return res.status(500).json({ error: message });
+      return handleStripeError(res, "verify checkout", error);
     }
   });
 
-  return httpServer;
+  app.use("/api", (_req, res) => res.status(404).json({ error: "Endpoint not found." }));
 }

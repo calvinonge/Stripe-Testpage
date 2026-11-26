@@ -1,177 +1,171 @@
-import { useState } from "react";
-import { Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, Check, CircleAlert, Copy, CreditCard, Loader2 } from "lucide-react";
+import { Link, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import { Storefront } from "@/components/storefront";
+import { loadPluvus, pluvusTrackerId, readPluvusClickId } from "@/lib/pluvus";
+import { HANGOUT_PASSES, formatCheckoutAmount, getHangoutPass, type HangoutPass, type TrackingMode } from "@shared/checkout";
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      'stripe-buy-button': {
-        'buy-button-id': string;
-        'publishable-key': string;
-      };
-    }
-  }
-}
+const TEST_CARD = "4242 4242 4242 4242";
 
-type Method = "buy-button" | "checkout-session" | "client-side";
+type CheckoutAttempt = {
+  offer: HangoutPass["id"];
+  request_id: string;
+  tracking_mode: TrackingMode;
+  pluvus_click_id?: string;
+};
 
-export default function Home() {
-  const [method, setMethod] = useState<Method>("buy-button");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function TestCard() {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
-  function getPluvusClickId(): string | null {
-    return (
-      ((window as { pluvus?: { getClickId?: () => string } }).pluvus?.getClickId?.()) ||
-      localStorage.getItem("pluvus_click_id") ||
-      (document.cookie.match(/(?:^|; )pluvus_click_id=([^;]+)/) || [])[1] ||
-      null
-    );
-  }
-
-  async function handleCheckoutSession(trackingMode: "webhook" | "client-side") {
-    setLoading(true);
-    setError(null);
+  async function copyCard() {
     try {
-      const clickId = getPluvusClickId();
-      const body: Record<string, string> = { tracking_mode: trackingMode };
-      // Only pass click ID for webhook mode — client-side mode bridges via browser
-      if (trackingMode === "webhook" && clickId) {
-        body.pluvus_click_id = clickId;
-      }
-      const res = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json() as { url?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Failed to create session");
-      if (!data.url) throw new Error("No checkout URL returned");
-      window.location.href = data.url;
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "An unknown error occurred");
-      setLoading(false);
+      await navigator.clipboard.writeText(TEST_CARD.replaceAll(" ", ""));
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
     }
   }
-
-  const TABS: { id: Method; label: string; sub: string }[] = [
-    { id: "buy-button",       label: "Buy Button",       sub: "Stripe embed" },
-    { id: "checkout-session", label: "Checkout Session", sub: "Webhook tracking" },
-    { id: "client-side",      label: "Client-Side",      sub: "No webhooks" },
-  ];
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-            <ShieldCheck className="w-6 h-6 text-primary" />
-          </div>
-          <CardTitle className="text-2xl" data-testid="text-page-title">
-            Complete Your Purchase
-          </CardTitle>
-          <p className="text-muted-foreground text-sm">
-            Secure checkout powered by Stripe
-          </p>
-        </CardHeader>
-
-        <CardContent className="space-y-6 pt-4">
-          <div className="flex rounded-lg border overflow-hidden" data-testid="method-toggle">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => { setMethod(tab.id); setError(null); }}
-                data-testid={`toggle-${tab.id}`}
-                className={`flex-1 py-2 px-1 flex flex-col items-center gap-0.5 text-xs font-medium transition-colors ${
-                  method === tab.id
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                <span className="text-sm font-semibold leading-tight">{tab.label}</span>
-                <span className={`text-[10px] leading-tight ${method === tab.id ? "text-primary-foreground/70" : "text-muted-foreground/70"}`}>
-                  {tab.sub}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex justify-center" data-testid="stripe-button-container">
-            {method === "buy-button" && (
-              <stripe-buy-button
-                buy-button-id="buy_btn_1SrdXcDzHNLHpZoC73L2UYP0"
-                publishable-key="pk_test_51SJM7yDzHNLHpZoCg8QsAFoVXHfurLig34GR3jn6eogmvRpLhA4atsbqctUTtnnGfcuxPXqRl9vBIHPMmQbrV7g8003VT81Ad8"
-              />
-            )}
-
-            {method === "checkout-session" && (
-              <div className="w-full space-y-3">
-                <p className="text-xs text-muted-foreground text-center">
-                  Pluvus click ID passed in session metadata → tracked via Stripe webhook
-                </p>
-                <Button
-                  onClick={() => handleCheckoutSession("webhook")}
-                  disabled={loading}
-                  className="w-full"
-                  data-testid="button-pay-now"
-                >
-                  {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Redirecting…</> : "Pay Now"}
-                </Button>
-                {error && (
-                  <p className="text-sm text-destructive text-center" data-testid="text-checkout-error">{error}</p>
-                )}
-              </div>
-            )}
-
-            {method === "client-side" && (
-              <div className="w-full space-y-3">
-                <p className="text-xs text-muted-foreground text-center">
-                  No metadata in session — Pluvus fires <code className="bg-muted px-1 rounded">trackConversion()</code> on the thank-you page
-                </p>
-                <Button
-                  onClick={() => handleCheckoutSession("client-side")}
-                  disabled={loading}
-                  className="w-full"
-                  data-testid="button-pay-now-client-side"
-                >
-                  {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Redirecting…</> : "Pay Now"}
-                </Button>
-                {error && (
-                  <p className="text-sm text-destructive text-center" data-testid="text-client-side-error">{error}</p>
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="mt-4 absolute bottom-4 left-0 right-0 flex flex-col items-center gap-2">
-        <div className="flex items-center gap-2">
-          <Link
-            href="/join"
-            data-testid="link-join-simple"
-            className="text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Affiliate signup — simple
-          </Link>
-          <Link
-            href="/join/pay"
-            data-testid="link-join-pay"
-            className="text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Affiliate signup — with PayPal
-          </Link>
+    <div className="brand-card-help">
+      <CreditCard size={19} aria-hidden="true" className="brand-card-icon" />
+      <div>
+        <div className="brand-test-card">
+          <strong>Test card</strong>
+          <code>{TEST_CARD}</code>
+          <Button type="button" variant="ghost" size="icon" className="brand-copy" onClick={copyCard}
+            aria-label="Copy test card number" title="Copy test card number">
+            {copyState === "copied" ? <Check size={15} /> : <Copy size={15} />}
+          </Button>
         </div>
-        <Link
-          href="/integrations"
-          data-testid="link-integrations"
-          className="text-xs text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-4 transition-colors"
-        >
-          Integration guide
-        </Link>
+        <p aria-live="polite">
+          {copyState === "copied" ? "Copied. " : copyState === "failed" ? "Select the number to copy it. " : ""}
+          Use any future expiry date and any 3-digit CVC.
+        </p>
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  const params = new URLSearchParams(useSearch());
+  const canceled = params.get("checkout") === "canceled";
+  const trackingMode: TrackingMode = pluvusTrackerId && params.get("tracking") === "client-side" ? "client-side" : "webhook";
+  const [pass, setPass] = useState<HangoutPass>(getHangoutPass(params.get("offer")) ?? HANGOUT_PASSES[0]);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const attempt = useRef<CheckoutAttempt | null>(null);
+  const config = useQuery<{ enabled: boolean }>({
+    queryKey: ["checkout-config"],
+    queryFn: async ({ signal }) => {
+      const response = await fetch("/api/checkout/config", { signal });
+      if (!response.ok) throw new Error("Could not check Stripe availability.");
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    function resetAfterBack(event: PageTransitionEvent) {
+      if (event.persisted) {
+        attempt.current = null;
+        setPending(false);
+      }
+    }
+    window.addEventListener("pageshow", resetAfterBack);
+    return () => window.removeEventListener("pageshow", resetAfterBack);
+  }, []);
+
+  useEffect(() => {
+    if (canceled) document.getElementById("passes")?.scrollIntoView();
+  }, [canceled]);
+
+  function choosePass(nextPass: HangoutPass) {
+    setPass(nextPass);
+    setError(null);
+    attempt.current = null;
+  }
+
+  async function startCheckout(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending || !config.data?.enabled) return;
+
+    setError(null);
+    setPending(true);
+    try {
+      if (!attempt.current || attempt.current.tracking_mode !== trackingMode) {
+        if (trackingMode === "webhook") await loadPluvus();
+        attempt.current = {
+          offer: pass.id,
+          request_id: crypto.randomUUID(),
+          tracking_mode: trackingMode,
+          pluvus_click_id: trackingMode === "webhook" ? readPluvusClickId() : undefined,
+        };
+      }
+
+      const response = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(attempt.current),
+      });
+      const data = await response.json().catch(() => null) as { url?: string; error?: string } | null;
+      if (!response.ok || !data?.url) {
+        setError(data?.error ?? "Stripe checkout could not open. Please try again.");
+        setPending(false);
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setError("Stripe checkout could not open. Check your connection and try again.");
+      setPending(false);
+    }
+  }
+
+  return (
+    <Storefront>
+      <main className="brand-container brand-main">
+        <section className="brand-hero" aria-labelledby="hangout-title">
+          <div>
+            <h1 id="hangout-title" className="brand-title">Have a hangout<br />with Calvin.</h1>
+            <p>Pick a hangout pass and try it out in Stripe. Every payment is simulated.</p>
+          </div>
+          <img src="/calvin-coffee.jpg" className="brand-hero-image" alt="Two coffees on a sunlit café table" width="1200" height="800" fetchPriority="high" />
+        </section>
+
+        <form className="brand-checkout" id="passes" onSubmit={startCheckout}>
+          <div className="brand-section-heading">
+            <h2>Choose a hangout pass</h2>
+            <span>One-time payment · USD</span>
+          </div>
+          {canceled && <p className="brand-notice" role="status">Checkout canceled. You can try the same pass or pick a different one.</p>}
+          {trackingMode === "client-side" && <p className="brand-notice">Browser attribution test is active.</p>}
+          <fieldset className="brand-passes" disabled={pending}>
+            <legend className="sr-only">Choose a hangout pass</legend>
+            {HANGOUT_PASSES.map((option) => (
+              <label key={option.id} className="brand-pass" data-selected={pass.id === option.id}>
+                <span className="brand-pass-name">{option.name}</span>
+                <span className="brand-pass-price">{formatCheckoutAmount(option.amount)}</span>
+                <input type="radio" name="hangout-pass" value={option.id} checked={pass.id === option.id}
+                  onChange={() => choosePass(option)} />
+              </label>
+            ))}
+          </fieldset>
+
+          <div className="brand-checkout-actions">
+            <TestCard />
+            <Button type="submit" className="brand-cta" disabled={pending || !config.data?.enabled}>
+              {pending ? <><Loader2 size={18} className="motion-safe:animate-spin" /> Opening Stripe…</>
+                : <>Test checkout · {formatCheckoutAmount(pass.amount)} <ArrowRight size={18} aria-hidden="true" /></>}
+            </Button>
+          </div>
+
+          {error && <p className="brand-notice brand-error" role="alert"><CircleAlert size={17} aria-hidden="true" /> {error}</p>}
+          {config.isPending && <p className="brand-availability" role="status">Checking Stripe test checkout…</p>}
+          {config.isError && <p className="brand-availability" role="status">Could not check Stripe availability. <button type="button" onClick={() => void config.refetch()}>Try again</button></p>}
+          {config.data?.enabled === false && <p className="brand-availability" role="status">Add a Stripe test key to enable checkout. <Link href="/integrations">Open test setup</Link></p>}
+        </form>
+      </main>
+    </Storefront>
   );
 }

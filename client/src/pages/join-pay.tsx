@@ -1,14 +1,15 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CheckCircle2, Clock, Copy, Check, Loader2, AlertCircle, Users, DollarSign, Link2 } from "lucide-react";
+import { AffiliateSetup } from "@/components/affiliate-setup";
+import { affiliateSignupEndpoint } from "@/lib/pluvus";
+import { BRAND_NAME } from "@shared/checkout";
 
-const CAMPAIGN_SLUG = "calvin-od8afn";
-const API_ENDPOINT = `https://pluvus.com/api/join/${CAMPAIGN_SLUG}`;
-const MERCHANT_NAME = "Calvin's test";
-const MERCHANT_SITE = "https://stripetesting.replit.app";
+const MERCHANT_NAME = BRAND_NAME;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type PageState = "form" | "success" | "pending";
@@ -124,12 +125,7 @@ function SuccessScreen({ data }: { data: SuccessData }) {
         <p>
           A welcome email has been sent to <strong className="text-foreground">{data.email}</strong> with everything you need.
         </p>
-        <p>
-          Questions? Contact {MERCHANT_NAME} at{" "}
-          <a href={MERCHANT_SITE} className="underline hover:text-foreground" target="_blank" rel="noopener noreferrer">
-            {MERCHANT_SITE.replace("https://", "")}
-          </a>
-        </p>
+        <Link href="/" className="underline hover:text-foreground">Back to the storefront</Link>
       </div>
     </div>
   );
@@ -179,11 +175,11 @@ export default function JoinPay() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setApiError(null);
-    if (!validate()) return;
+    if (!affiliateSignupEndpoint || !validate()) return;
 
     setLoading(true);
     try {
-      const res = await fetch(API_ENDPOINT, {
+      const res = await fetch(affiliateSignupEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -234,6 +230,8 @@ export default function JoinPay() {
       setLoading(false);
     }
   }
+
+  if (!affiliateSignupEndpoint) return <AffiliateSetup />;
 
   return (
     <div className="min-h-screen bg-background flex items-start justify-center p-4 pt-8 pb-12">
