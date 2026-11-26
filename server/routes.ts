@@ -3,6 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import Stripe from "stripe";
 import { z } from "zod";
 import {
+  BRAND_NAME,
   CHECKOUT_CURRENCY,
   getHangoutPass,
   type CheckoutSession,
@@ -105,7 +106,10 @@ export function registerRoutes(app: Express) {
     try {
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
+        // Managed Payments can be the account default and controls its own payment methods.
+        managed_payments: { enabled: false },
         payment_method_types: ["card"],
+        branding_settings: { display_name: BRAND_NAME, button_color: "#283e33" },
         line_items: [{
           quantity: 1,
           price_data: {
