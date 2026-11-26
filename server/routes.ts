@@ -3,7 +3,6 @@ import { rateLimit } from "express-rate-limit";
 import Stripe from "stripe";
 import { z } from "zod";
 import {
-  BRAND_NAME,
   CHECKOUT_CURRENCY,
   getHangoutPass,
   type CheckoutSession,
@@ -35,7 +34,23 @@ function getAppOrigin() {
 
 function handleStripeError(res: Response, operation: string, error: unknown) {
   if (error instanceof Stripe.errors.StripeError) {
-    console.error(`[stripe] ${operation}: ${error.type}${error.code ? ` (${error.code})` : ""}`);
+    const detail = operation === "create checkout" && error instanceof Stripe.errors.StripeInvalidRequestError
+      ? error.message
+        .replace(/\b(?:(?:sk|rk|pk)_(?:test|live)|whsec|cs_(?:test|live)|acct|pi|cus)_[a-z0-9_-]+\b/gi, "[redacted]")
+        .replace(/https?:\/\/\S+/gi, "[url]")
+        .replace(/\b\S+@\S+\.\S+\b/g, "[email]")
+        .replace(/\s+/g, " ")
+        .slice(0, 400)
+      : undefined;
+    const context = {
+      type: error.type,
+      status: error.statusCode,
+      code: error.code,
+      parameter: error.param,
+      requestId: error.requestId,
+      detail,
+    };
+    console.error(`[stripe] ${operation}: ${JSON.stringify(context)}`);
     if (error instanceof Stripe.errors.StripeAuthenticationError || error instanceof Stripe.errors.StripePermissionError) {
       return res.status(503).json({ error: "Stripe rejected the test key. Check the Stripe test key in your service settings." });
     }
@@ -91,7 +106,6 @@ export function registerRoutes(app: Express) {
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
         payment_method_types: ["card"],
-        branding_settings: { display_name: BRAND_NAME, button_color: "#283e33" },
         line_items: [{
           quantity: 1,
           price_data: {
